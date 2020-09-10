@@ -60,6 +60,44 @@ var logToFile = true
 var logInitiated = false
 var logWriter = make(chan string)
 
+type WantlistCacheEntry struct {
+	firstWantHave time.Time
+	lastWantHave time.Time
+	numWantHave int
+	firstWantBlock time.Time
+	lastWantBlock time.Time
+	numWantBlock int
+}
+
+var cacheWantLists = false
+var wantListCache = make(map[peer.ID]map[cid.Cid]WantlistCacheEntry)
+var wantListCacheMutex = &sync.Mutex{}
+
+func EnableWantlistCaching(enable bool) {
+	cacheWantLists = enable
+}
+
+func GetWantlistCache() map[peer.ID]map[cid.Cid]WantlistCacheEntry {
+	wantListCacheMutex.Lock()
+	defer wantListCacheMutex.Unlock()
+	return wantListCache
+}
+
+func GetAndResetWantlistCache() map[peer.ID]map[cid.Cid]WantlistCacheEntry {
+	wantListCacheMutex.Lock()
+	defer func() {
+		wantListCache = make(map[peer.ID]map[cid.Cid]WantlistCacheEntry)
+		wantListCacheMutex.Unlock()
+	}()
+	return wantListCache
+}
+
+func ResetWantlistCache() {
+	wantListCacheMutex.Lock()
+	defer wantListCacheMutex.Unlock()
+	wantListCache = make(map[peer.ID]map[cid.Cid]WantlistCacheEntry)
+}
+
 const (
 	// outboxChanBuffer must be 0 to prevent stale messages from being sent
 	outboxChanBuffer = 0
@@ -481,18 +519,67 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 		}
 	}
 
+
+
 	if len(entries) > 0 {
+
+		remotePeerWantlistCache := make(map[cid.Cid]WantlistCacheEntry)
+		currentTime := time.Now()
+		if cacheWantLists {
+			wantListCacheMutex.Lock()
+			// TODO races possible (multiple threads do sth with wantListCache of same peer at the same time)
+			//		-> extend the mutex until cacheEntry has been written back?
+			if _, exists := wantListCache[p]; exists {
+				remotePeerWantlistCache = wantListCache[p]
+			}
+			wantListCacheMutex.Unlock()
+		}
+		updateRemotePeerWantlistCache := func(contentID cid.Cid, isWantHave bool) {
+			if cacheWantLists {
+				var currentCidCacheEntry WantlistCacheEntry
+				if _, exists := remotePeerWantlistCache[contentID]; exists {
+					currentCidCacheEntry = remotePeerWantlistCache[contentID]
+				} else {
+					currentCidCacheEntry.numWantHave = 0
+					currentCidCacheEntry.numWantBlock = 0
+				}
+
+				if isWantHave {
+					if remotePeerWantlistCache[contentID].firstWantHave.IsZero() {
+						currentCidCacheEntry.firstWantHave = currentTime
+					}
+					currentCidCacheEntry.lastWantHave = currentTime
+					currentCidCacheEntry.numWantHave++
+				} else {
+					if remotePeerWantlistCache[contentID].firstWantBlock.IsZero() {
+						currentCidCacheEntry.firstWantBlock = currentTime
+					}
+					currentCidCacheEntry.lastWantBlock = currentTime
+					currentCidCacheEntry.numWantBlock++
+				}
+				remotePeerWantlistCache[contentID] = currentCidCacheEntry
+			}
+		}
+
 		addToLog("Bitswap engine <- msg", "local", e.self, "from", p, "entryCount", len(entries))
 		for _, et := range entries {
 			if !et.Cancel {
 				if et.WantType == pb.Message_Wantlist_Have {
 					addToLog("Bitswap engine <- want-have", "local", e.self, "from", p, "cid", et.Cid)
+					updateRemotePeerWantlistCache(et.Cid, true)
 				} else {
 					addToLog("Bitswap engine <- want-block", "local", e.self, "from", p, "cid", et.Cid)
+					updateRemotePeerWantlistCache(et.Cid, false)
 				}
 			}
 		}
 		writeLog()
+
+		if cacheWantLists {
+			wantListCacheMutex.Lock()
+			wantListCache[p] = remotePeerWantlistCache
+			wantListCacheMutex.Unlock()
+		}
 	}
 
 	if m.Empty() {
