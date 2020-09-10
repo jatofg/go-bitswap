@@ -4,6 +4,7 @@ package decision
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -55,6 +56,9 @@ import (
 // quickly, maintain good relationships with peers, etc).
 
 var log = logging.Logger("engine")
+var logToFile = true
+var logInitiated = false
+var logWriter = make(chan string)
 
 const (
 	// outboxChanBuffer must be 0 to prevent stale messages from being sent
@@ -516,17 +520,67 @@ func (e *Engine) Peers() []peer.ID {
 func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwapMessage) {
 	entries := m.Wantlist()
 
+	// log blocks to file
+	if !logInitiated && logToFile {
+		go func() {
+			logFile, err := os.OpenFile("wantlistLogV2.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+			if err == nil {
+				defer logFile.Close()
+			} else {
+				logToFile = false
+				return
+			}
+			for {
+				val, ok := <-logWriter
+				if !ok {
+					logToFile = false
+					return
+				}
+				_, err := logFile.WriteString(val)
+				if err != nil {
+					logToFile = false
+					return
+				}
+				err = logFile.Sync()
+				if err != nil {
+					logToFile = false
+					return
+				}
+			}
+		}()
+		logInitiated = true
+	}
+
+	var logMessage string
+	addToLog := func(msg string, keysAndValues... interface{}) {
+		if logToFile {
+			logMessage += fmt.Sprintf("Date: %s, Message: %s, Keys and values: ", time.Now().String(), msg)
+			for i := 0; i < len(keysAndValues)-1; i += 2 {
+				logMessage += fmt.Sprintf("[%s] = %s, ", keysAndValues[i], keysAndValues[i+1])
+			}
+			logMessage += "\n";
+		} else {
+			log.Debugw(msg, keysAndValues)
+		}
+	}
+	writeLog := func() {
+		if logToFile {
+			logWriter <- logMessage
+		}
+	}
+
 	if len(entries) > 0 {
-		log.Debugw("Bitswap engine <- msg", "local", e.self, "from", p, "entryCount", len(entries))
+		addToLog("Bitswap engine <- msg", "local", e.self, "from", p, "entryCount", len(entries))
 		for _, et := range entries {
 			if !et.Cancel {
 				if et.WantType == pb.Message_Wantlist_Have {
-					log.Debugw("Bitswap engine <- want-have", "local", e.self, "from", p, "cid", et.Cid)
+					addToLog("Bitswap engine <- want-have", "local", e.self, "from", p, "cid", et.Cid)
 				} else {
-					log.Debugw("Bitswap engine <- want-block", "local", e.self, "from", p, "cid", et.Cid)
+					addToLog("Bitswap engine <- want-block", "local", e.self, "from", p, "cid", et.Cid)
 				}
 			}
 		}
+		writeLog()
 	}
 
 	if m.Empty() {
