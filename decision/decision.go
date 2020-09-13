@@ -10,3 +10,9 @@ type ScoreLedger = intdec.ScoreLedger
 
 // Expose ScorePeerFunc externally
 type ScorePeerFunc = intdec.ScorePeerFunc
+
+// Expose want-list cache externally
+var EnableWantlistCaching = intdec.EnableWantlistCaching
+var GetWantlistCache = intdec.GetWantlistCache
+var GetAndResetWantlistCache = intdec.GetAndResetWantlistCache
+var ResetWantlistCache = intdec.ResetWantlistCache

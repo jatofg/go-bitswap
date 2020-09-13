@@ -56,37 +56,28 @@ import (
 // quickly, maintain good relationships with peers, etc).
 
 var log = logging.Logger("engine")
-var logToFile = true
+var logToFile = false
 var logInitiated = false
 var logWriter = make(chan string)
 
-type WantlistCacheEntry struct {
-	firstWantHave time.Time
-	lastWantHave time.Time
-	numWantHave int
-	firstWantBlock time.Time
-	lastWantBlock time.Time
-	numWantBlock int
-}
-
 var cacheWantLists = false
-var wantListCache = make(map[peer.ID]map[cid.Cid]WantlistCacheEntry)
+var wantListCache = make(map[peer.ID]map[cid.Cid]bsmsg.WantlistCacheEntry)
 var wantListCacheMutex = &sync.Mutex{}
 
 func EnableWantlistCaching(enable bool) {
 	cacheWantLists = enable
 }
 
-func GetWantlistCache() map[peer.ID]map[cid.Cid]WantlistCacheEntry {
+func GetWantlistCache() map[peer.ID]map[cid.Cid]bsmsg.WantlistCacheEntry {
 	wantListCacheMutex.Lock()
 	defer wantListCacheMutex.Unlock()
 	return wantListCache
 }
 
-func GetAndResetWantlistCache() map[peer.ID]map[cid.Cid]WantlistCacheEntry {
+func GetAndResetWantlistCache() map[peer.ID]map[cid.Cid]bsmsg.WantlistCacheEntry {
 	wantListCacheMutex.Lock()
 	defer func() {
-		wantListCache = make(map[peer.ID]map[cid.Cid]WantlistCacheEntry)
+		wantListCache = make(map[peer.ID]map[cid.Cid]bsmsg.WantlistCacheEntry)
 		wantListCacheMutex.Unlock()
 	}()
 	return wantListCache
@@ -95,7 +86,7 @@ func GetAndResetWantlistCache() map[peer.ID]map[cid.Cid]WantlistCacheEntry {
 func ResetWantlistCache() {
 	wantListCacheMutex.Lock()
 	defer wantListCacheMutex.Unlock()
-	wantListCache = make(map[peer.ID]map[cid.Cid]WantlistCacheEntry)
+	wantListCache = make(map[peer.ID]map[cid.Cid]bsmsg.WantlistCacheEntry)
 }
 
 const (
@@ -523,7 +514,7 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 
 	if len(entries) > 0 {
 
-		remotePeerWantlistCache := make(map[cid.Cid]WantlistCacheEntry)
+		remotePeerWantlistCache := make(map[cid.Cid]bsmsg.WantlistCacheEntry)
 		currentTime := time.Now()
 		if cacheWantLists {
 			wantListCacheMutex.Lock()
@@ -536,26 +527,26 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 		}
 		updateRemotePeerWantlistCache := func(contentID cid.Cid, isWantHave bool) {
 			if cacheWantLists {
-				var currentCidCacheEntry WantlistCacheEntry
+				var currentCidCacheEntry bsmsg.WantlistCacheEntry
 				if _, exists := remotePeerWantlistCache[contentID]; exists {
 					currentCidCacheEntry = remotePeerWantlistCache[contentID]
 				} else {
-					currentCidCacheEntry.numWantHave = 0
-					currentCidCacheEntry.numWantBlock = 0
+					currentCidCacheEntry.NumWantHave = 0
+					currentCidCacheEntry.NumWantBlock = 0
 				}
 
 				if isWantHave {
-					if remotePeerWantlistCache[contentID].firstWantHave.IsZero() {
-						currentCidCacheEntry.firstWantHave = currentTime
+					if remotePeerWantlistCache[contentID].FirstWantHave.IsZero() {
+						currentCidCacheEntry.FirstWantHave = currentTime
 					}
-					currentCidCacheEntry.lastWantHave = currentTime
-					currentCidCacheEntry.numWantHave++
+					currentCidCacheEntry.LastWantHave = currentTime
+					currentCidCacheEntry.NumWantHave++
 				} else {
-					if remotePeerWantlistCache[contentID].firstWantBlock.IsZero() {
-						currentCidCacheEntry.firstWantBlock = currentTime
+					if remotePeerWantlistCache[contentID].FirstWantBlock.IsZero() {
+						currentCidCacheEntry.FirstWantBlock = currentTime
 					}
-					currentCidCacheEntry.lastWantBlock = currentTime
-					currentCidCacheEntry.numWantBlock++
+					currentCidCacheEntry.LastWantBlock = currentTime
+					currentCidCacheEntry.NumWantBlock++
 				}
 				remotePeerWantlistCache[contentID] = currentCidCacheEntry
 			}

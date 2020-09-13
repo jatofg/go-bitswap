@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"time"
 
 	pb "github.com/ipfs/go-bitswap/message/pb"
 	"github.com/ipfs/go-bitswap/wantlist"
@@ -104,6 +105,15 @@ type Entry struct {
 	wantlist.Entry
 	Cancel       bool
 	SendDontHave bool
+}
+
+type WantlistCacheEntry struct {
+	FirstWantHave  time.Time
+	LastWantHave   time.Time
+	NumWantHave    int
+	FirstWantBlock time.Time
+	LastWantBlock  time.Time
+	NumWantBlock   int
 }
 
 // Get the size of the entry on the wire
