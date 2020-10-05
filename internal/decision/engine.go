@@ -61,11 +61,30 @@ var logInitiated = false
 var logWriter = make(chan string)
 
 var cacheWantLists = false
+var wantListFilter = make(map[peer.ID]bool)
 var wantListCache = make(map[peer.ID]map[cid.Cid]bsmsg.WantlistCacheEntry)
 var wantListCacheMutex = &sync.Mutex{}
 
 func EnableWantlistCaching(enable bool) {
 	cacheWantLists = enable
+}
+
+func SetWantlistFilter(filter map[peer.ID]bool) {
+	wantListFilter = filter
+}
+
+func cacheWantlistsOfPeer(pid peer.ID) bool {
+	if !cacheWantLists {
+		return false
+	}
+	if len(wantListFilter) == 0 {
+		return true
+	}
+	filtersEntry, isInFilters := wantListFilter[pid]
+	if isInFilters {
+		return filtersEntry
+	}
+	return false
 }
 
 func GetWantlistCache() map[peer.ID]map[cid.Cid]bsmsg.WantlistCacheEntry {
@@ -493,13 +512,13 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 	}
 
 	var logMessage string
-	addToLog := func(msg string, keysAndValues... interface{}) {
+	addToLog := func(msg string, keysAndValues ...interface{}) {
 		if logToFile {
 			logMessage += fmt.Sprintf("Date: %s, Message: %s, Keys and values: ", time.Now().String(), msg)
 			for i := 0; i < len(keysAndValues)-1; i += 2 {
 				logMessage += fmt.Sprintf("[%s] = %s, ", keysAndValues[i], keysAndValues[i+1])
 			}
-			logMessage += "\n";
+			logMessage += "\n"
 		} else {
 			log.Debugw(msg, keysAndValues)
 		}
@@ -510,13 +529,12 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 		}
 	}
 
-
-
 	if len(entries) > 0 {
 
 		remotePeerWantlistCache := make(map[cid.Cid]bsmsg.WantlistCacheEntry)
 		currentTime := time.Now()
-		if cacheWantLists {
+		cacheWantlistsOfThisPeer := cacheWantlistsOfPeer(p)
+		if cacheWantlistsOfThisPeer {
 			wantListCacheMutex.Lock()
 			// TODO races possible (multiple threads do sth with wantListCache of same peer at the same time)
 			//		-> extend the mutex until cacheEntry has been written back?
@@ -526,7 +544,7 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 			wantListCacheMutex.Unlock()
 		}
 		updateRemotePeerWantlistCache := func(contentID cid.Cid, isWantHave bool) {
-			if cacheWantLists {
+			if cacheWantlistsOfThisPeer {
 				var currentCidCacheEntry bsmsg.WantlistCacheEntry
 				if _, exists := remotePeerWantlistCache[contentID]; exists {
 					currentCidCacheEntry = remotePeerWantlistCache[contentID]
@@ -566,7 +584,7 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 		}
 		writeLog()
 
-		if cacheWantLists {
+		if cacheWantlistsOfThisPeer {
 			wantListCacheMutex.Lock()
 			wantListCache[p] = remotePeerWantlistCache
 			wantListCacheMutex.Unlock()

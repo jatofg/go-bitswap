@@ -13,6 +13,7 @@ type ScorePeerFunc = intdec.ScorePeerFunc
 
 // Expose want-list cache externally
 var EnableWantlistCaching = intdec.EnableWantlistCaching
+var SetWantlistFilter = intdec.SetWantlistFilter
 var GetWantlistCache = intdec.GetWantlistCache
 var GetAndResetWantlistCache = intdec.GetAndResetWantlistCache
 var ResetWantlistCache = intdec.ResetWantlistCache
