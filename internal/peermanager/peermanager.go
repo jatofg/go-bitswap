@@ -135,10 +135,10 @@ func (pm *PeerManager) ResponseReceived(p peer.ID, ks []cid.Cid) {
 // For each peer it filters out want-haves that have previously been sent to
 // the peer.
 func (pm *PeerManager) BroadcastWantHaves(ctx context.Context, wantHaves []cid.Cid) {
-	pm.pqLk.Lock()
-	defer pm.pqLk.Unlock()
-
-	pm.pwm.broadcastWantHaves(wantHaves)
+	//pm.pqLk.Lock()
+	//defer pm.pqLk.Unlock()
+	//
+	//pm.pwm.broadcastWantHaves(wantHaves)
 }
 
 // SendWants sends the given want-blocks and want-haves to the given peer.
