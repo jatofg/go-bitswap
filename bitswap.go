@@ -96,6 +96,13 @@ func WantlistBroadcastEnabled(enabled bool) Option {
 	}
 }
 
+// NoBroadcastSubsetProportion can be used to disable wantlist broadcasting for a subset of peers
+func NoBroadcastSubsetProportion(proportion float64) Option {
+	return func(bs *Bitswap) {
+		bs.noBroadcastSubset = proportion
+	}
+}
+
 // EngineBlockstoreWorkerCount sets the number of worker threads used for
 // blockstore operations in the decision engine
 func EngineBlockstoreWorkerCount(count int) Option {
@@ -209,6 +216,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		rebroadcastDelay:        delay.Fixed(time.Minute),
 		engineBstoreWorkerCount: defaulEngineBlockstoreWorkerCount,
 		broadcastWantlists:      true,
+		noBroadcastSubset:       0,
 	}
 
 	// apply functional options before starting and running bitswap
@@ -217,6 +225,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 	}
 
 	pm.SetBroadcastWantlists(bs.broadcastWantlists)
+	pm.SetNoBroadcastSubset(bs.noBroadcastSubset)
 
 	// Set up decision engine
 	bs.engine = decision.NewEngine(bstore, bs.engineBstoreWorkerCount, network.ConnectionManager(), network.Self(), bs.engineScoreLedger)
@@ -306,6 +315,9 @@ type Bitswap struct {
 
 	// whether to broadcast wants to peers not in a session
 	broadcastWantlists bool
+
+	// proportion of peers not receiving wantlists
+	noBroadcastSubset float64
 }
 
 type counters struct {

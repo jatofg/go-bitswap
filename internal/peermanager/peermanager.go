@@ -73,6 +73,10 @@ func (pm *PeerManager) SetBroadcastWantlists(broadcastWantlists bool) {
 	pm.broadcastWantlists = broadcastWantlists;
 }
 
+func (pm *PeerManager) SetNoBroadcastSubset(noBroadcastSubset float64) {
+	pm.pwm.noBroadcastSubset = noBroadcastSubset
+}
+
 func (pm *PeerManager) AvailablePeers() []peer.ID {
 	// TODO: Rate-limit peers
 	return pm.ConnectedPeers()

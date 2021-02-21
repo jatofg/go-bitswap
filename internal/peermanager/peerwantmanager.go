@@ -3,9 +3,12 @@ package peermanager
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	cid "github.com/ipfs/go-cid"
 	peer "github.com/libp2p/go-libp2p-core/peer"
+
+	"math/rand"
 )
 
 // Gauge can be used to keep track of a metric that increases and decreases
@@ -34,12 +37,16 @@ type peerWantManager struct {
 	wantGauge Gauge
 	// Keeps track of the number of active want-blocks
 	wantBlockGauge Gauge
+
+	// proportion of peers which should not receive wantlist broadcasts
+	noBroadcastSubset float64
 }
 
 type peerWant struct {
 	wantBlocks *cid.Set
 	wantHaves  *cid.Set
 	peerQueue  PeerQueue
+	broadcast  bool
 }
 
 // New creates a new peerWantManager with a Gauge that keeps track of the
@@ -61,14 +68,20 @@ func (pwm *peerWantManager) addPeer(peerQueue PeerQueue, p peer.ID) {
 		return
 	}
 
+	broadcastToThisPeer := true
+	if pwm.noBroadcastSubset > 0 {
+		broadcastToThisPeer = rand.New(rand.NewSource(time.Now().Unix())).Float64() >= pwm.noBroadcastSubset
+	}
+
 	pwm.peerWants[p] = &peerWant{
 		wantBlocks: cid.NewSet(),
 		wantHaves:  cid.NewSet(),
 		peerQueue:  peerQueue,
+		broadcast:  broadcastToThisPeer,
 	}
 
 	// Broadcast any live want-haves to the newly connected peer
-	if pwm.broadcastWants.Len() > 0 {
+	if broadcastToThisPeer && pwm.broadcastWants.Len() > 0 {
 		wants := pwm.broadcastWants.Keys()
 		peerQueue.AddBroadcastWantHaves(wants)
 	}
@@ -141,6 +154,10 @@ func (pwm *peerWantManager) broadcastWantHaves(wantHaves []cid.Cid) {
 
 	// Send broadcast wants to each peer
 	for _, pws := range pwm.peerWants {
+		if !pws.broadcast {
+			continue
+		}
+
 		peerUnsent := bcstWantsBuffer[:0]
 		for _, c := range unsent {
 			// If we've already sent a want to this peer, skip them.
