@@ -89,6 +89,13 @@ func RebroadcastDelay(newRebroadcastDelay delay.D) Option {
 	}
 }
 
+// WantlistBroadcastEnabled can be used to disable wantlist broadcasting
+func WantlistBroadcastEnabled(enabled bool) Option {
+	return func(bs *Bitswap) {
+		bs.broadcastWantlists = enabled
+	}
+}
+
 // EngineBlockstoreWorkerCount sets the number of worker threads used for
 // blockstore operations in the decision engine
 func EngineBlockstoreWorkerCount(count int) Option {
