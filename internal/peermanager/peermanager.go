@@ -47,6 +47,8 @@ type PeerManager struct {
 	peerSessions map[peer.ID]map[uint64]struct{}
 
 	self peer.ID
+	
+	broadcastWantlists bool
 }
 
 // New creates a new PeerManager, given a context and a peerQueueFactory.
@@ -62,7 +64,13 @@ func New(ctx context.Context, createPeerQueue PeerQueueFactory, self peer.ID) *P
 
 		sessions:     make(map[uint64]Session),
 		peerSessions: make(map[peer.ID]map[uint64]struct{}),
+		
+		broadcastWantlists:  true,
 	}
+}
+
+func (pm *PeerManager) SetBroadcastWantlists(broadcastWantlists bool) {
+	pm.broadcastWantlists = broadcastWantlists;
 }
 
 func (pm *PeerManager) AvailablePeers() []peer.ID {
@@ -135,10 +143,12 @@ func (pm *PeerManager) ResponseReceived(p peer.ID, ks []cid.Cid) {
 // For each peer it filters out want-haves that have previously been sent to
 // the peer.
 func (pm *PeerManager) BroadcastWantHaves(ctx context.Context, wantHaves []cid.Cid) {
-	//pm.pqLk.Lock()
-	//defer pm.pqLk.Unlock()
-	//
-	//pm.pwm.broadcastWantHaves(wantHaves)
+	if pm.broadcastWantlists {
+		pm.pqLk.Lock()
+		defer pm.pqLk.Unlock()
+
+		pm.pwm.broadcastWantHaves(wantHaves)
+	}
 }
 
 // SendWants sends the given want-blocks and want-haves to the given peer.

@@ -201,12 +201,15 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		provSearchDelay:         defaultProvSearchDelay,
 		rebroadcastDelay:        delay.Fixed(time.Minute),
 		engineBstoreWorkerCount: defaulEngineBlockstoreWorkerCount,
+		broadcastWantlists:      true,
 	}
 
 	// apply functional options before starting and running bitswap
 	for _, option := range options {
 		option(bs)
 	}
+
+	pm.SetBroadcastWantlists(bs.broadcastWantlists)
 
 	// Set up decision engine
 	bs.engine = decision.NewEngine(bstore, bs.engineBstoreWorkerCount, network.ConnectionManager(), network.Self(), bs.engineScoreLedger)
@@ -293,6 +296,9 @@ type Bitswap struct {
 
 	// the score ledger used by the decision engine
 	engineScoreLedger deciface.ScoreLedger
+
+	// whether to broadcast wants to peers not in a session
+	broadcastWantlists bool
 }
 
 type counters struct {
