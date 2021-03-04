@@ -40,6 +40,8 @@ type peerWantManager struct {
 
 	// proportion of peers which should not receive wantlist broadcasts
 	noBroadcastSubset float64
+
+	randSource *rand.Rand
 }
 
 type peerWant struct {
@@ -58,6 +60,7 @@ func newPeerWantManager(wantGauge Gauge, wantBlockGauge Gauge) *peerWantManager 
 		wantPeers:      make(map[cid.Cid]map[peer.ID]struct{}),
 		wantGauge:      wantGauge,
 		wantBlockGauge: wantBlockGauge,
+		randSource:     rand.New(rand.NewSource(time.Now().Unix())),
 	}
 }
 
@@ -70,7 +73,7 @@ func (pwm *peerWantManager) addPeer(peerQueue PeerQueue, p peer.ID) {
 
 	broadcastToThisPeer := true
 	if pwm.noBroadcastSubset > 0 {
-		broadcastToThisPeer = rand.New(rand.NewSource(time.Now().Unix())).Float64() >= pwm.noBroadcastSubset
+		broadcastToThisPeer = pwm.randSource.Float64() >= pwm.noBroadcastSubset
 	}
 
 	pwm.peerWants[p] = &peerWant{
