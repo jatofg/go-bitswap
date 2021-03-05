@@ -38,7 +38,7 @@ type peerWantManager struct {
 	// Keeps track of the number of active want-blocks
 	wantBlockGauge Gauge
 
-	// proportion of peers which should not receive wantlist broadcasts
+	// proportion of skipped WL broadcasts
 	noBroadcastSubset float64
 
 	randSource *rand.Rand
@@ -48,7 +48,6 @@ type peerWant struct {
 	wantBlocks *cid.Set
 	wantHaves  *cid.Set
 	peerQueue  PeerQueue
-	broadcast  bool
 }
 
 // New creates a new peerWantManager with a Gauge that keeps track of the
@@ -64,6 +63,13 @@ func newPeerWantManager(wantGauge Gauge, wantBlockGauge Gauge) *peerWantManager 
 	}
 }
 
+func (pwm *peerWantManager) shallBroadcast() bool {
+	if pwm.noBroadcastSubset > 0 {
+		return pwm.randSource.Float64() >= pwm.noBroadcastSubset
+	}
+	return true
+}
+
 // addPeer adds a peer whose wants we need to keep track of. It sends the
 // current list of broadcast wants to the peer.
 func (pwm *peerWantManager) addPeer(peerQueue PeerQueue, p peer.ID) {
@@ -71,21 +77,21 @@ func (pwm *peerWantManager) addPeer(peerQueue PeerQueue, p peer.ID) {
 		return
 	}
 
-	broadcastToThisPeer := true
-	if pwm.noBroadcastSubset > 0 {
-		broadcastToThisPeer = pwm.randSource.Float64() >= pwm.noBroadcastSubset
-	}
-
 	pwm.peerWants[p] = &peerWant{
 		wantBlocks: cid.NewSet(),
 		wantHaves:  cid.NewSet(),
 		peerQueue:  peerQueue,
-		broadcast:  broadcastToThisPeer,
 	}
 
 	// Broadcast any live want-haves to the newly connected peer
-	if broadcastToThisPeer && pwm.broadcastWants.Len() > 0 {
+	if pwm.broadcastWants.Len() > 0 {
 		wants := pwm.broadcastWants.Keys()
+		wantsToSend := make([]cid.Cid, 0, len(wants))
+		for _, want := range wants {
+			if pwm.shallBroadcast() {
+				wantsToSend = append(wantsToSend, want)
+			}
+		}
 		peerQueue.AddBroadcastWantHaves(wants)
 	}
 }
@@ -157,7 +163,7 @@ func (pwm *peerWantManager) broadcastWantHaves(wantHaves []cid.Cid) {
 
 	// Send broadcast wants to each peer
 	for _, pws := range pwm.peerWants {
-		if !pws.broadcast {
+		if !pwm.shallBroadcast() {
 			continue
 		}
 
